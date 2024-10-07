@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Alert, Platform, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  RefreshControl,
+  TouchableOpacity,
+  Alert,
+  Platform,
+  ActivityIndicator,
+  Image,
+} from "react-native";
 import axios from "axios";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -29,6 +40,7 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0); // Track last refresh time
 
   // Initial fetch for 10 users when the app loads
   useEffect(() => {
@@ -40,13 +52,20 @@ export default function App() {
     loadData();
   }, []);
 
-  // Pull-to-refresh handler
+  // Pull-to-refresh handler with a 30-second cooldown
   const onRefresh = useCallback(async () => {
+    const currentTime = Date.now();
+    if (currentTime - lastRefreshTime < 10000) {
+      // 10-second cooldown
+      Alert.alert("Too Many Refreshes", "Please wait 10 seconds before refreshing again.");
+      return;
+    }
     setRefreshing(true);
     const fetchedUsers = await fetchUsers();
     setUsers(fetchedUsers);
     setRefreshing(false);
-  }, []);
+    setLastRefreshTime(currentTime); // Update the last refresh time
+  }, [lastRefreshTime]);
 
   // Add one more user when the FAB is clicked
   const addUser = async () => {
@@ -54,7 +73,12 @@ export default function App() {
       const newUserResponse = await axios.get("https://random-data-api.com/api/users/random_user?size=1");
       setUsers((prevUsers) => [newUserResponse.data[0], ...prevUsers]);
     } catch (error) {
-      console.error("Error fetching new user: ", error);
+      if (error.response && error.response.status === 429) {
+        Alert.alert("Too Many Requests", "Please wait before adding more users.");
+      } else {
+        console.error("Error fetching new user: ", error);
+        Alert.alert("Error", "Failed to add a new user. Please try again.");
+      }
     }
   };
 
@@ -64,10 +88,12 @@ export default function App() {
       <Text style={styles.name}>{`${item.first_name} ${item.last_name}`}</Text>
       {Platform.OS === "ios" ? (
         // iOS: Display the initials
-        <UserAvatar size={50} name={`${item.first_name} ${item.last_name}`} />
+        <View style={styles.iosAvatar}>
+          <Text style={styles.iosAvatarText}>{`${item.first_name[0]}${item.last_name[0]}`}</Text>
+        </View>
       ) : (
         // Android: Display the cartoon avatar
-        <UserAvatar size={50} src={item.avatar} />
+        <Image source={{ uri: item.avatar }} style={styles.avatar} />
       )}
     </View>
   );
@@ -117,8 +143,27 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     flexDirection: "row",
     justifyContent: "space-between", // Align name and avatar side by side
+    alignItems: "center",
   },
   name: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  iosAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#2196F3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iosAvatarText: {
+    color: "white",
     fontSize: 18,
     fontWeight: "bold",
   },
